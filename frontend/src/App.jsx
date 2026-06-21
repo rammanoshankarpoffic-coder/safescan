@@ -55,21 +55,41 @@ function App() {
     const qr = new Html5Qrcode(SCANNER_ELEMENT_ID)
     scannerRef.current = qr
 
-    qr.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 240, height: 240 } },
-      handleScanSuccess,
-      () => {} // ignore per-frame "no QR found" errors
-    )
-      .then(() => {
-        isRunningRef.current = true
-      })
-      .catch(() => {
-        setErrorMsg(
-          'Could not access camera. Please allow camera permission and reload.'
-        )
-        setScreen('error')
-      })
+    const startCamera = async () => {
+      // Try the rear/environment camera first (what phones should use).
+      // Fall back to whatever camera is available if that constraint
+      // can't be satisfied (e.g. laptops only have a front-facing camera,
+      // and some browsers reject an unmatchable facingMode entirely).
+      const attempts = [
+        { facingMode: { exact: 'environment' } },
+        { facingMode: 'environment' },
+        true, // any available camera
+      ]
+
+      for (const constraint of attempts) {
+        try {
+          await qr.start(
+            constraint,
+            { fps: 10, qrbox: { width: 240, height: 240 } },
+            handleScanSuccess,
+            () => {} // ignore per-frame "no QR found" errors
+          )
+          isRunningRef.current = true
+          return // success, stop trying further fallbacks
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('Camera start attempt failed:', constraint, err)
+        }
+      }
+
+      // All attempts failed
+      setErrorMsg(
+        'Could not access camera. Please allow camera permission and reload.'
+      )
+      setScreen('error')
+    }
+
+    startCamera()
 
     return () => {
       if (isRunningRef.current) {
